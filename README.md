@@ -61,7 +61,7 @@ A aplicação pode ser facilmente estendida para uso interno nas empresas que pr
 ### Clonando o Repositório
 
 ```bash
-git clone https://github.com/SeuUsuario/api-consulta-gtin.git
+git clone https://github.com/marcos2r/api-consulta-gtin.git
 cd api-consulta-gtin
 ```
 
@@ -117,13 +117,31 @@ Resposta em formato JSON.
 
 ```json
 {
-    "status": "success",
-    "data": {
-        "gtin": "7891234567890",
-        "produto": "Nome do Produto",
-        "marca": "Marca do Produto",
-        "ncm": "12345678"
+  "soap:Envelope": {
+    "@xmlns:soap": "http://www.w3.org/2003/05/soap-envelope",
+    "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    "@xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
+    "soap:Body": {
+      "ccgConsGTINResponse": {
+        "@xmlns": "http://www.portalfiscal.inf.br/nfe/wsdl/ccgConsGtin",
+        "nfeResultMsg": {
+          "retConsGTIN": {
+            "@versao": "1.00",
+            "@xmlns": "http://www.portalfiscal.inf.br/nfe",
+            "verAplic": "SVRS240905092942DR",
+            "cStat": "9490",
+            "xMotivo": "Consulta realizada com sucesso",
+            "dhResp": "2025-02-23T21:13:28-03:00",
+            "GTIN": "7894900019926",
+            "tpGTIN": "13",
+            "xProd": "Refrigerante Coca Cola Garrafa 2l",
+            "NCM": "22021000",
+            "CEST": "301001"
+          }
+        }
+      }
     }
+  }
 }
 ```
 ---
@@ -133,14 +151,14 @@ Resposta em formato JSON.
 cURL
 
 ```bash 
-curl -X GET "http://localhost:8000/consulta?gtin=7891234567890"
+curl -X GET "http://localhost:8000/gtin/7894900019926"
 ```	
 Python
 
 ```python
 import requests
 
-response = requests.get('http://localhost:8000/consulta', params={'gtin': '7891234567890'})
+response = requests.get('http://localhost:8000/gtin/7894900019926')
 print(response.json())
 ```
 ---
@@ -153,4 +171,4 @@ Este projeto está licenciado sob a Licença MIT. Veja o arquivo LICENSE para ma
 
 - **Nome**: Marcos Ricardo Rodrigues
 - **E-mail**: bcc.marcos@gmail.com 
-
+- **LinkedIn**: https://www.linkedin.com/in/marcos-ricardo-rodrigues-b0381059/
