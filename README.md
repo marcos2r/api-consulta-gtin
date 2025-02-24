@@ -69,7 +69,7 @@ cd api-consulta-gtin
 
 ### Variáveis de Ambiente (.env)
 
-- Crie um arquivo .env na raiz do projeto e defina as seguintes variáveis:
+Crie um arquivo .env na raiz do projeto e defina as seguintes variáveis:
 
 ```bash
 SEFAZ_API_URL=https://dfe-portal.svrs.rs.gov.br/ws/ccgConsGTIN/ccgConsGTIN.asmx
@@ -81,7 +81,7 @@ CERTIFICATE_PASSWORD=your_certificate_password
 
 ### Instalando Dependências
 
-- Crie um ambiente virtual e instale as dependências:
+Crie um ambiente virtual e instale as dependências:
 
 ```bash
 python -m venv venv
@@ -92,12 +92,12 @@ pip install -r requirements.txt
 
 ## Execução
 
-- Para iniciar a aplicação, execute:
+Para iniciar a aplicação, execute:
 
 ```bash
 uvicorn main:app --reload
 ```
-- A aplicação estará disponível em http://localhost:8000 .
+A aplicação estará disponível em http://localhost:8000 .
 
 ---
 
@@ -113,7 +113,7 @@ uvicorn main:app --reload
 
 ### Retorno e Estrutura de Resposta
 
-- Resposta em formato JSON.
+Resposta em formato JSON.
 
 ```json
 {
@@ -130,12 +130,12 @@ uvicorn main:app --reload
 
 ## Exemplos de Requisição
 
-- cURL
+cURL
 
 ```bash 
 curl -X GET "http://localhost:8000/consulta?gtin=7891234567890"
 ```	
-- Python
+Python
 
 ```python
 import requests
