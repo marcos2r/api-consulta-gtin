@@ -6,20 +6,23 @@ Este projeto provê uma **API** que permite consultar informações de produtos 
 
 ## Sumário
 
-1. [Visão Geral](#visão-geral)  
-2. [Tecnologias Utilizadas](#tecnologias-utilizadas)  
-3. [Pré-requisitos](#pré-requisitos)  
-4. [Instalação e Configuração](#instalação-e-configuração)  
+01. [Visão Geral](#visão-geral)  
+02. [Tecnologias Utilizadas](#tecnologias-utilizadas)  
+03. [Pré-requisitos](#pré-requisitos)  
+04. [Instalação e Configuração](#instalação-e-configuração)  
    - [Clonando o Repositório](#clonando-o-repositório)  
    - [Variáveis de Ambiente (.env)](#variáveis-de-ambiente-env)  
    - [Instalando Dependências](#instalando-dependências)  
-5. [Execução](#execução)  
-6. [Uso da API](#uso-da-api)  
+05. [Execução](#execução)  
+06. [Uso da API](#uso-da-api)  
    - [Endpoint de Consulta GTIN](#endpoint-de-consulta-gtin)  
    - [Retorno e Estrutura de Resposta](#retorno-e-estrutura-de-resposta)  
-7. [Exemplos de Requisição](#exemplos-de-requisição)  
-8. [Licença](#licença)  
-9. [Contato](#contato)  
+07. [Exemplos de Requisição](#exemplos-de-requisição) 
+08. [Arquivo Procfile](#arquivo-procfile) 
+   - [Conteúdo do Procfile](#conteúdo-do-procfile)
+09. [Contribuição](#contribuição)
+10. [Licença](#licença)  
+11. [Contato](#contato)  
 
 ---
 
@@ -161,6 +164,23 @@ import requests
 response = requests.get('http://localhost:8000/gtin/7894900019926')
 print(response.json())
 ```
+---
+
+## Arquivo Procfile
+
+O arquivo `Procfile` é utilizado para definir o comando que deve ser executado para iniciar a aplicação em ambientes de produção, como o Heroku. Ele especifica que a aplicação deve ser iniciada usando o servidor WSGI `gunicorn`, que é uma escolha comum para aplicações Python em produção devido à sua eficiência e capacidade de lidar com múltiplas solicitações simultaneamente.
+
+### Conteúdo do Procfile
+
+```plaintext
+web: gunicorn main:app
+``` 
+---
+
+## Contribuição
+
+Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou enviar pull requests.
+
 ---
 
 ## Licença
