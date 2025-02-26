@@ -16,6 +16,7 @@ Este projeto provê uma **API** que permite consultar informações de produtos 
 05. [Execução](#execução)  
 06. [Uso da API](#uso-da-api)  
    - [Endpoint de Consulta GTIN](#endpoint-de-consulta-gtin)  
+   - [Documentação Automática](#documentação-automática)
    - [Retorno e Estrutura de Resposta](#retorno-e-estrutura-de-resposta)  
 07. [Exemplos de Requisição](#exemplos-de-requisição) 
 08. [Arquivo Procfile](#arquivo-procfile) 
@@ -68,8 +69,6 @@ git clone https://github.com/marcos2r/api-consulta-gtin.git
 cd api-consulta-gtin
 ```
 
----
-
 ### Variáveis de Ambiente (.env)
 
 Crie um arquivo .env na raiz do projeto e defina as seguintes variáveis:
@@ -79,8 +78,6 @@ SEFAZ_API_URL=https://dfe-portal.svrs.rs.gov.br/ws/ccgConsGTIN/ccgConsGTIN.asmx
 CERTIFICATE_PATH=path/to/your/certificate.pfx
 CERTIFICATE_PASSWORD=your_certificate_password
 ```	
-
----
 
 ### Instalando Dependências
 
@@ -112,7 +109,17 @@ A aplicação estará disponível em http://localhost:8000 .
 - Método: GET
 - Parâmetros: codigo_gtin (obrigatório)
 
----
+### Documentação Automática
+
+O FastAPI fornece uma documentação automática e interativa para a API, que pode ser acessada através dos seguintes endpoints:
+
+- **Swagger UI**: Uma interface gráfica para explorar e testar a API.
+  - URL: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+- **ReDoc**: Outra interface de documentação, focada em uma apresentação mais detalhada.
+  - URL: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+Essas interfaces são geradas automaticamente pelo FastAPI e permitem que você visualize todos os endpoints disponíveis, seus métodos, parâmetros e exemplos de resposta.
 
 ### Retorno e Estrutura de Resposta
 
