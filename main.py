@@ -92,7 +92,7 @@ def consultar_gtin_pfx(gtin, pfx_file, pfx_password):
         url,
         data=soap_envelope.encode("utf-8"),
         headers=headers,
-        verify=True,
+        verify=False,
         timeout=30
     )
     return response.text
