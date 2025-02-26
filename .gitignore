@@ -2,7 +2,7 @@
 .env
 
 # Certificados
-#*.pfx
+*.pfx
 *.key
 *.pem
 *.p12
