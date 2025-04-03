@@ -1,21 +1,31 @@
-# Arquivos de ambiente
+# Ambiente virtual
+venv/
+env/
 .env
 
 # Certificados
 *.pfx
-*.key
-*.pem
 *.p12
+*.pem
+*.key
+*.crt
+
+# Logs
+logs/
+*.log
 
 # Cache Python
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 
-# Ambiente virtual
-venv/
-env/
-
-# IDE
-.vscode/
+# Arquivos de IDE
 .idea/
+.vscode/
+*.swp
+*.swo
+
+# Arquivos temporários
+*.tmp
+*.bak
