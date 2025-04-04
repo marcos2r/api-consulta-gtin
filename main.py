@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     empresa_nome: str = "Empresa"
     
     # Campos adicionais encontrados no .env
-    ignorar_ssl_sefaz: bool = False
+    ignorar_ssl_sefaz: bool = False  # Modificado para permitir ignorar SSL da SEFAZ
     sefaz_api_url: str = "https://dfe-portal.svrs.rs.gov.br/ws/ccgConsGTIN/ccgConsGTIN.asmx"
     cosmos_api_token_1: str = None
     cosmos_api_token_2: str = None
@@ -181,9 +181,12 @@ def consultar_gtin_pfx(gtin: str, pfx_file: str, pfx_password: str) -> str:
     session = requests.Session()
     session.mount('https://', Pkcs12Adapter(pkcs12_filename=pfx_file, pkcs12_password=pfx_password))
     verify_ssl = True
-    if settings.ambiente == "desenvolvimento" and settings.ignorar_ssl:
+    
+    # Modificado para verificar a configuração ignorar_ssl_sefaz
+    if settings.ignorar_ssl_sefaz or (settings.ambiente == "desenvolvimento" and settings.ignorar_ssl):
         verify_ssl = False
-        logger.warning("Verificação SSL desabilitada - NÃO USE EM PRODUÇÃO")
+        logger.warning("Verificação SSL desabilitada para SEFAZ - Use com cautela em produção")
+    
     try:
         response = session.post(url, data=soap_envelope.encode("utf-8"),
                                   headers=headers, verify=verify_ssl, timeout=30)
