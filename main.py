@@ -16,10 +16,12 @@ import asyncio
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseSettings  # Certifique-se de usar Pydantic < 2.0
+# Modificando a importação do Pydantic para a versão 2.x
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # =========================
-# Configurações com Pydantic
+# Configurações com Pydantic v2
 # =========================
 class Settings(BaseSettings):
     certificado_caminho: str
@@ -31,9 +33,20 @@ class Settings(BaseSettings):
     contato_nome: str = "Suporte Técnico"
     contato_email: str = "suporte@exemplo.com"
     empresa_nome: str = "Empresa"
+    
+    # Campos adicionais encontrados no .env
+    ignorar_ssl_sefaz: bool = False
+    sefaz_api_url: str = "https://dfe-portal.svrs.rs.gov.br/ws/ccgConsGTIN/ccgConsGTIN.asmx"
+    cosmos_api_token_1: str = None
+    cosmos_api_token_2: str = None
+    cosmos_api_token_3: str = None
+    cosmos_api_token_4: str = None
+    cosmos_api_token_5: str = None
+    cors_origins: str = "*"
+    allowed_hosts: str = "localhost"
 
-    class Config:
-        env_file = ".env"
+    # Nova forma de configurar o modelo em Pydantic v2
+    model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()
 
@@ -158,21 +171,10 @@ def consultar_gtin_pfx(gtin: str, pfx_file: str, pfx_password: str) -> str:
     """
     url = "https://dfe-servico.svrs.rs.gov.br/ws/ccgConsGTIN/ccgConsGTIN.asmx"
     gtin_seguro = re.sub(r'[^\d]', '', gtin)
-    soap_envelope = f'''<?xml version="1.0" encoding="UTF-8"?>
-<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope" 
-                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-                 xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-  <soap12:Header/>
-  <soap12:Body>
-    <ccgConsGTIN xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/ccgConsGtin">
-      <nfeDadosMsg>
-        <consGTIN versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe">
-          <GTIN>{gtin_seguro}</GTIN>
-        </consGTIN>
-      </nfeDadosMsg>
-    </ccgConsGTIN>
-  </soap12:Body>
-</soap12:Envelope>'''
+    
+    # Modificando para uma única linha sem quebras
+    soap_envelope = f'<?xml version="1.0" encoding="UTF-8"?><soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><soap12:Header/><soap12:Body><ccgConsGTIN xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/ccgConsGtin"><nfeDadosMsg><consGTIN versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe"><GTIN>{gtin_seguro}</GTIN></consGTIN></nfeDadosMsg></ccgConsGTIN></soap12:Body></soap12:Envelope>'
+    
     headers = {
         "Content-Type": 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/ccgConsGtin/ccgConsGTIN"'
     }
