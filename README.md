@@ -1,5 +1,3 @@
-
-```markdown
 # API de Consulta GTIN
 
 Esta API, construída com FastAPI, permite consultar informações de produtos por meio do código GTIN/EAN utilizando o webservice oficial da SEFAZ. Além disso, os dados são enriquecidos com informações complementares fornecidas pelo serviço EANdata, e a resposta é formatada seguindo um padrão compatível com a nomenclatura NF-e.
