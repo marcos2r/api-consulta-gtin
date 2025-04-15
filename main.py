@@ -511,7 +511,7 @@ app = FastAPI(
             "description": "Endpoints com informações e exemplos de uso da API"
         }
     ],
-    docs_url="/docs",
+    docs_url="/",
     redoc_url="/redoc",
 )
 
