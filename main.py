@@ -264,7 +264,7 @@ def formatar_resposta_personalizada(dict_retorno: dict, codigo_gtin: str) -> dic
                 resposta["produto"] = {
                     "GTIN": ret_cons_gtin.get("GTIN", codigo_gtin),
                     "tpGTIN": ret_cons_gtin.get("tpGTIN", ""),
-                    "xProd": ret_cons_gtin.get("xProd", ""),
+                    "xProd": ret_cons_gtin.get("xProd", "").upper(),
                     "NCM": ret_cons_gtin.get("NCM", ""),
                     "CEST": ret_cons_gtin.get("CEST", ""),
                     "fonte": "SEFAZ"
@@ -428,7 +428,7 @@ def formatar_resposta_bluesoft(dados_bluesoft: dict, codigo_gtin: str) -> dict:
             "produto": {
                 "GTIN": codigo_gtin,
                 "tpGTIN": f"GTIN-{len(codigo_gtin)}",
-                "xProd": dados_bluesoft.get("description", ""),
+                "xProd": dados_bluesoft.get("description", "").upper(),
                 "NCM": dados_bluesoft.get("ncm", {}).get("code", "") if "ncm" in dados_bluesoft else "",
                 "CEST": dados_bluesoft.get("cest", {}).get("code", "") if "cest" in dados_bluesoft else "",
                 "fonte": "Bluesoft Cosmos"
