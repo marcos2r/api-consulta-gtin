@@ -222,28 +222,83 @@ def buscar_chave(dicionario: dict, chave_procurada: str):
 # Enriquecimento com EANdata (assíncrono)
 # =========================
 async def enriquecer_com_eandata(dict_retorno: dict, codigo_gtin: str) -> dict:
+    """
+    Enriquecer os dados de um produto consultado na SEFAZ com informações adicionais da EANdata.
+
+    Este método utiliza a descrição do produto obtida via SEFAZ para buscar (ou atualizar) dados
+    complementares na base EANdata. O envio para a EANdata é realizado via POST, em formato JSON,
+    permitindo separar o nome do produto ('product') e o peso/volume padronizado ('Weight').
+    Caso a função de extração de peso/volume retorne um valor, ele é enviado no campo apropriado.
+    O retorno do EANdata é incorporado no dicionário de resposta, sob a chave 'eandata'.
+
+    Parâmetros:
+        dict_retorno (dict): Dicionário contendo os dados da resposta SEFAZ.
+        codigo_gtin (str): Código GTIN/EAN do produto.
+
+    Retorna:
+        dict: O mesmo dicionário recebido, porém com enriquecimento pela chave 'eandata'
+              (ou 'eandata_error' em caso de falha na comunicação).
+
+    Exemplo de payload enviado:
+        {
+            "v": 3,
+            "mode": "json",
+            "keycode": "<SUA_API_KEY>",
+            "update": "<GTIN>",
+            "fields": {
+                "product": "Passatempo Biscoito Chocomix Morango 130g",
+                "Weight": "130 grams"
+            }
+        }
+
+    Observações:
+    - O campo "Weight" só é enviado se detectado pela função extrair_peso.
+    - O endpoint POST usado segue a documentação oficial da EANdata (v3).
+    - Em caso de erro na comunicação, a mensagem será registrada no log e incluída em 'eandata_error'.
+
+    """
     try:
-        ret_cons_gtin_dict = buscar_chave(dict_retorno, "retConsGTIN")
-        if ret_cons_gtin_dict and "retConsGTIN" in ret_cons_gtin_dict:
-            ret_cons_gtin = ret_cons_gtin_dict["retConsGTIN"]
-            if ret_cons_gtin.get("xMotivo") == "Consulta realizada com sucesso":
-                logger.info("Consulta SEFAZ realizada com sucesso")
-                produto_nome = ret_cons_gtin.get("xProd", "")
+        # Busca a chave 'retConsGTIN' (resultado da consulta SEFAZ)
+        node = buscar_chave(dict_retorno, "retConsGTIN")
+        if node and "retConsGTIN" in node:
+            data = node["retConsGTIN"]
+            # Prossegue somente se a SEFAZ retornar sucesso na consulta
+            if data.get("xMotivo") == "Consulta realizada com sucesso":
+                produto_nome = data.get("xProd", "")
+                # Extrai o peso/volume padronizado (ex: '130 grams', '2 L', etc.)
+                peso_volume = extrair_peso(produto_nome)
+
                 if settings.eandata_api_key:
-                    gtin_seguro = re.sub(r'[^\d]', '', codigo_gtin)
-                    produto_seguro = re.sub(r'\s+', '%20', produto_nome)
-                    eandata_url = f'https://eandata.com/feed/?v=3&keycode={settings.eandata_api_key}&mode=json&update={gtin_seguro}&field=product&value={produto_seguro}'
+                    gtin_limpo = re.sub(r'\D', '', codigo_gtin)
+                    url = "https://eandata.com/feed/"
+
+                    # Monta o payload JSON a ser enviado
+                    payload = {
+                        "v": 3,
+                        "mode": "json",
+                        "keycode": settings.eandata_api_key,
+                        "update": gtin_limpo,
+                        "fields": {
+                            "product": produto_nome
+                        }
+                    }
+                    # Se existir peso/volume extraído, inclui como campo separado
+                    if peso_volume:
+                        payload["fields"]["Weight"] = peso_volume
+
+                    logger.debug(f"Enviando para EANdata: {payload}")  # Log para debug
+
+                    # Realiza a chamada HTTP POST com o JSON
                     async with httpx.AsyncClient(timeout=30) as client:
-                        try:
-                            response = await client.get(eandata_url)
-                            response.raise_for_status()
-                            eandata_data = response.json()
-                            dict_retorno["eandata"] = eandata_data
-                        except Exception as e:
-                            logger.error(f"Erro na requisição ao EANdata: {str(e)}")
-                            dict_retorno["eandata_error"] = "Erro de conexão com o serviço EANdata"
+                        response = await client.post(url, json=payload)
+                        response.raise_for_status()  # Dispara exceção se status != 200
+                        # Incorpora a resposta do EANdata no dicionário original
+                        dict_retorno["eandata"] = response.json()
     except Exception as e:
-        logger.error(f"Erro ao enriquecer dados com EANdata: {str(e)}")
+        logger.error(f"Erro no enriquecimento com EANdata: {e}")
+        # Em caso de erro, inclui a chave 'eandata_error' com mensagem apropriada
+        dict_retorno["eandata_error"] = "Erro na requisição/enriquecimento EANdata"
+    # Retorna o dicionário de resposta, enriquecido ou não
     return dict_retorno
 
 # =========================
@@ -269,6 +324,11 @@ def formatar_resposta_personalizada(dict_retorno: dict, codigo_gtin: str) -> dic
                     "CEST": ret_cons_gtin.get("CEST", ""),
                     "fonte": "SEFAZ"
                 }
+
+                peso_volume = extrair_peso(ret_cons_gtin.get("xProd", ""))
+                if peso_volume:
+                    resposta["produto"]["peso_volume"] = peso_volume
+
                 resposta["cStat"] = "100"
                 resposta["xMotivo"] = "Consulta realizada com sucesso"
                 if "eandata" in dict_retorno and "status" in dict_retorno["eandata"]:
@@ -419,6 +479,9 @@ def formatar_resposta_bluesoft(dados_bluesoft: dict, codigo_gtin: str) -> dict:
     try:
         if not dados_bluesoft:
             return None
+
+        nome_produto = dados_bluesoft.get("description", "")
+
         resposta = {
             "status": "success",
             "provider": "PAIRUS Soluções Tecnológicas",
@@ -434,6 +497,11 @@ def formatar_resposta_bluesoft(dados_bluesoft: dict, codigo_gtin: str) -> dict:
                 "fonte": "Bluesoft Cosmos"
             }
         }
+
+        peso_volume = extrair_peso(nome_produto)
+        if peso_volume:
+            resposta["produto"]["peso_volume"] = peso_volume
+
         info_adicional = {}
         if "brand" in dados_bluesoft and dados_bluesoft["brand"]:
             info_adicional["xMarca"] = dados_bluesoft["brand"].get("name", "")
@@ -460,6 +528,81 @@ def formatar_resposta_bluesoft(dados_bluesoft: dict, codigo_gtin: str) -> dict:
     except Exception as e:
         logger.error(f"Erro ao formatar resposta da Bluesoft: {str(e)}")
         return None
+
+# =========================
+# Extrai o peso ou volume de um produto a partir de uma string de descrição.
+# =========================
+def extrair_peso(descricao):
+    """
+    Extrai e converte automaticamente o peso ou volume de um produto a partir de sua descrição textual.
+
+    Esta função identifica e extrai valores numéricos seguidos das unidades de medida mais comuns encontradas
+    em descrições de produtos no varejo: gramas (g), quilogramas (kg), mililitros (ml) e litros (l).
+    Também reconhece descrições compostas, como embalagens múltiplas (ex: '2x130g', '3 x 200ml', '12×350ml'),
+    multiplicando corretamente para retornar o total.
+
+    Funcionamento:
+    - Procura por padrões como: "130g", "1kg", "500ml", "2L", "2x130g", "3 x 200ml", "2×1L", etc.
+    - Aceita multiplicadores (com ou sem espaços e usando 'x' ou '×', incluindo unicode).
+    - Aceita números decimais usando ponto ou vírgula.
+    - Converte sempre o resultado para "grams" ou "ml", padronizando.
+    - Retorna None se não encontrar nenhum valor compatível.
+
+    Parâmetros:
+        descricao (str): Texto descritivo do produto, podendo conter peso/volume, unidade e, opcionalmente, multiplicador.
+
+    Retorno:
+        str ou None: String com o valor total e unidade padronizada, como "130 grams", "1000 ml", "540 grams".
+                     Retorna None se não for possível extrair nenhum valor.
+
+    Exemplos:
+        >>> extrair_peso("Passatempo Biscoito Chocomix Morango 130g")
+        '130 grams'
+        >>> extrair_peso("Leite Integral 1L")
+        '1000 ml'
+        >>> extrair_peso("Sabonete Dove 6x90g")
+        '540 grams'
+        >>> extrair_peso("Pacote 3 x 200ml")
+        '600 ml'
+        >>> extrair_peso("Amaciante 1,5L")
+        '1500 ml'
+        >>> extrair_peso("Cerveja lata 12×350ml")
+        '4200 ml'
+        >>> extrair_peso("Produto sem peso")
+        None
+
+    Observações:
+    - Só reconhece as unidades 'g', 'kg', 'ml', 'l'. Para outros casos ("unidades", "litros", etc), adapte o regex.
+    - Se houver mais de um padrão na string, retorna apenas o primeiro encontrado.
+    - Não faz distinção entre peso bruto e líquido.
+    - Multiplicador deve estar antes do valor e da unidade (ex: "6x90g", "2 x 1L", "12×350ml").
+
+    Exemplo de regex usado:
+        r'(?:(\\d+)\\s*[x×]\\s*)?(\\d+(?:[\\.,]\\d+)?)(\\s*)(g|kg|ml|l)\\b'
+
+    Autor: Seu Nome
+    Data: 2024-07
+    """
+
+    padrao = re.compile(r'(?:(\d+)\s*[x×]\s*)?(\d+(?:[\.,]\d+)?)(\s*)(g|kg|ml|l)\b', re.I)
+    match = padrao.search(descricao)
+    if match:
+        multiplicador = int(match.group(1)) if match.group(1) else 1
+        valor = float(match.group(2).replace(',', '.'))
+        unidade = match.group(4).lower()
+        if unidade == 'kg':
+            peso = valor * 1000 * multiplicador
+            return f"{peso:.0f} grams"
+        elif unidade == 'g':
+            peso = valor * multiplicador
+            return f"{peso:.0f} grams"
+        elif unidade == 'l':
+            peso = valor * 1000 * multiplicador
+            return f"{peso:.0f} ml"
+        elif unidade == 'ml':
+            peso = valor * multiplicador
+            return f"{peso:.0f} ml"
+    return None
 
 # =========================
 # FastAPI e Endpoints
