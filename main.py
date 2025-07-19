@@ -5,8 +5,10 @@ import glob
 import hashlib
 import logging
 import logging.config
+import urllib
 import xmltodict
 import requests
+import json
 from requests_pkcs12 import Pkcs12Adapter
 from functools import wraps
 from datetime import datetime, timedelta
@@ -27,6 +29,7 @@ class Settings(BaseSettings):
     certificado_caminho: str
     certificado_senha: str
     eandata_api_key: str = None
+    eandata_url: str = None
     cosmos_api_token: str = None
     ambiente: str = "producao"
     ignorar_ssl: bool = False
@@ -221,84 +224,103 @@ def buscar_chave(dicionario: dict, chave_procurada: str):
 # =========================
 # Enriquecimento com EANdata (assíncrono)
 # =========================
-async def enriquecer_com_eandata(dict_retorno: dict, codigo_gtin: str) -> dict:
+async def enriquecer_com_eandata(dict_retorno: dict) -> dict:
     """
-    Enriquecer os dados de um produto consultado na SEFAZ com informações adicionais da EANdata.
+    Envia dados enriquecidos de um produto para a API do EANdata.
 
-    Este método utiliza a descrição do produto obtida via SEFAZ para buscar (ou atualizar) dados
-    complementares na base EANdata. O envio para a EANdata é realizado via POST, em formato JSON,
-    permitindo separar o nome do produto ('product') e o peso/volume padronizado ('Weight').
-    Caso a função de extração de peso/volume retorne um valor, ele é enviado no campo apropriado.
-    O retorno do EANdata é incorporado no dicionário de resposta, sob a chave 'eandata'.
+    Essa função realiza um POST assíncrono para a API do EANdata usando a versão 3 do endpoint.
+    Ela é executada somente se a resposta anterior (ex: SEFAZ ou Bluesoft) tiver sido bem-sucedida.
+
+    A função extrai o nome do produto, remove o peso (caso detectado), e envia os seguintes campos:
+    - product: nome do produto sem peso
+    - weight: valor numérico extraído da descrição (ex: "200", se "200ml")
+    - image_url: se presente nos dados da Bluesoft (ou outra fonte)
+
+    O objetivo é manter a base EANdata atualizada de forma automática e silenciosa,
+    sem interromper o fluxo principal da API mesmo em caso de erro.
 
     Parâmetros:
-        dict_retorno (dict): Dicionário contendo os dados da resposta SEFAZ.
-        codigo_gtin (str): Código GTIN/EAN do produto.
+        dict_retorno (dict): Dicionário de resposta contendo os dados do produto já consultado.
 
     Retorna:
-        dict: O mesmo dicionário recebido, porém com enriquecimento pela chave 'eandata'
-              (ou 'eandata_error' em caso de falha na comunicação).
+        dict: O mesmo dicionário de entrada, inalterado no formato, mas com logs indicando
+              o resultado do enriquecimento. Se houver falha no envio, um dicionário de erro é retornado.
 
-    Exemplo de payload enviado:
-        {
-            "v": 3,
-            "mode": "json",
-            "keycode": "<SUA_API_KEY>",
-            "update": "<GTIN>",
-            "fields": {
-                "product": "Passatempo Biscoito Chocomix Morango 130g",
-                "Weight": "130 grams"
-            }
+    Logs:
+        - Informa início do processo
+        - Sucesso na chamada HTTP
+        - Resposta do EANdata (em modo texto)
+        - Erros na comunicação com o serviço externo
+    """
+
+    # Inicia o processo de enriquecimento com a API do EANdata
+    logger.info("Iniciando enriquecimento com EANdata")
+
+    try:
+        # Verifica se o status anterior da consulta é "success"
+        if dict_retorno['status'] != 'success':
+            logger.warning(f"Status não 'success' na resposta da SEFAZ: {dict_retorno['status']}")
+            return dict_retorno  # Enriquecimento não ocorre se status for erro
+
+        # Verifica se chave da API e URL do EANdata estão configuradas
+        if not settings.eandata_api_key or not settings.eandata_url:
+            logger.warning("Chave de API ou URL de EANdata não configuradas. Enriquecimento não realizado.")
+            return dict_retorno
+
+        # Dados base da requisição
+        url = settings.eandata_url
+        keycode = settings.eandata_api_key
+        update = dict_retorno['produto']['GTIN']
+
+        # Extrai peso do nome do produto (caso exista) e remove do nome
+        weight = extrair_peso(dict_retorno['produto']['xProd'])
+        product = dict_retorno['produto']['xProd']
+        if weight:
+            product = product.replace(weight, '')
+
+        # Cria lista de campos para enviar ao EANdata
+        fields = [{"field": "product", "value": product}]
+
+        # Se o peso foi extraído, adiciona-o no campo "weight"
+        if weight:
+            numero_peso = re.search(r'\d+', weight)
+            if numero_peso:
+                fields.append({"field": "weight", "value": numero_peso.group()})
+
+        # Se imagem da Bluesoft estiver presente, adiciona "image_url"
+        image_url = dict_retorno['produto'].get('infoAdicional', {}).get('urlImagem')
+        if image_url:
+            fields.append({"field": "image_url", "value": image_url})
+
+        # Codifica a lista de campos como JSON e em URL
+        fields_encoded = urllib.parse.quote_plus(json.dumps(fields))
+
+        # Monta a URL de envio com todos os parâmetros necessários
+        url_completa = (
+            f"{url}?v=3&mode=json"
+            f"&keycode={keycode}"
+            f"&update={update}"
+            f"&field=*bulk*"
+            f"&fields={fields_encoded}"
+        )
+
+        # Realiza a requisição HTTP assíncrona
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url_completa)
+
+            if response.status_code == 200:
+                logger.info("Enriquecimento com EANdata bem-sucedido")
+                logger.info(f"Resposta do EANdata: {response.text}")
+
+    except Exception as e:
+        # Captura falhas durante o processo de envio ou conexão
+        logger.error(f"Erro na comunicação com EANdata: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Erro ao enriquecer com EANdata: {str(e)}"
         }
 
-    Observações:
-    - O campo "Weight" só é enviado se detectado pela função extrair_peso.
-    - O endpoint POST usado segue a documentação oficial da EANdata (v3).
-    - Em caso de erro na comunicação, a mensagem será registrada no log e incluída em 'eandata_error'.
-
-    """
-    try:
-        # Busca a chave 'retConsGTIN' (resultado da consulta SEFAZ)
-        node = buscar_chave(dict_retorno, "retConsGTIN")
-        if node and "retConsGTIN" in node:
-            data = node["retConsGTIN"]
-            # Prossegue somente se a SEFAZ retornar sucesso na consulta
-            if data.get("xMotivo") == "Consulta realizada com sucesso":
-                produto_nome = data.get("xProd", "")
-                # Extrai o peso/volume padronizado (ex: '130 grams', '2 L', etc.)
-                peso_volume = extrair_peso(produto_nome)
-
-                if settings.eandata_api_key:
-                    gtin_limpo = re.sub(r'\D', '', codigo_gtin)
-                    url = "https://eandata.com/feed/"
-
-                    # Monta o payload JSON a ser enviado
-                    payload = {
-                        "v": 3,
-                        "mode": "json",
-                        "keycode": settings.eandata_api_key,
-                        "update": gtin_limpo,
-                        "fields": {
-                            "product": produto_nome
-                        }
-                    }
-                    # Se existir peso/volume extraído, inclui como campo separado
-                    if peso_volume:
-                        payload["fields"]["Weight"] = peso_volume
-
-                    logger.debug(f"Enviando para EANdata: {payload}")  # Log para debug
-
-                    # Realiza a chamada HTTP POST com o JSON
-                    async with httpx.AsyncClient(timeout=30) as client:
-                        response = await client.post(url, json=payload)
-                        response.raise_for_status()  # Dispara exceção se status != 200
-                        # Incorpora a resposta do EANdata no dicionário original
-                        dict_retorno["eandata"] = response.json()
-    except Exception as e:
-        logger.error(f"Erro no enriquecimento com EANdata: {e}")
-        # Em caso de erro, inclui a chave 'eandata_error' com mensagem apropriada
-        dict_retorno["eandata_error"] = "Erro na requisição/enriquecimento EANdata"
-    # Retorna o dicionário de resposta, enriquecido ou não
+    # Retorna os dados originais (modificados ou não)
     return dict_retorno
 
 # =========================
@@ -312,6 +334,7 @@ def formatar_resposta_personalizada(dict_retorno: dict, codigo_gtin: str) -> dic
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "produto": {}
         }
+
         ret_cons_gtin_dict = buscar_chave(dict_retorno, "retConsGTIN")
         if ret_cons_gtin_dict and "retConsGTIN" in ret_cons_gtin_dict:
             ret_cons_gtin = ret_cons_gtin_dict["retConsGTIN"]
@@ -331,6 +354,8 @@ def formatar_resposta_personalizada(dict_retorno: dict, codigo_gtin: str) -> dic
 
                 resposta["cStat"] = "100"
                 resposta["xMotivo"] = "Consulta realizada com sucesso"
+
+                # Enriquecimento EANdata
                 if "eandata" in dict_retorno and "status" in dict_retorno["eandata"]:
                     eandata = dict_retorno["eandata"]
                     if eandata["status"].get("code") in ["200", "500"]:
@@ -338,16 +363,35 @@ def formatar_resposta_personalizada(dict_retorno: dict, codigo_gtin: str) -> dic
                         if "product" in eandata and eandata["product"]:
                             produto_eandata = eandata["product"]
                             extras = {}
+
                             campo_mapping = {
                                 "description": "xDesc",
                                 "brand": "xMarca",
                                 "category": "xCategoria",
-                                "image": "urlImagem",
                                 "country": "xOrigem"
                             }
                             for campo_original, campo_nfe in campo_mapping.items():
                                 if campo_original in produto_eandata and produto_eandata[campo_original]:
                                     extras[campo_nfe] = produto_eandata[campo_original]
+
+                            # Lógica de fallback de imagem
+                            ean_img_url = ""
+                            try:
+                                produtos_eandata = dict_retorno["eandata"].get("products", [])
+                                if produtos_eandata:
+                                    campos = produtos_eandata[0].get("fields", [])
+                                    for campo in campos:
+                                        if campo.get("field") == "product" and campo.get("status") == "ok":
+                                            ean_img_url = produtos_eandata[0].get("img_url", "")
+                            except Exception as e:
+                                logger.warning(f"Erro ao extrair imagem da EANdata: {str(e)}")
+
+                            # Verifica se imagem da EANdata é válida
+                            if ean_img_url and not ean_img_url.lower().startswith("image error"):
+                                extras["urlImagem"] = ean_img_url
+                            elif "thumbnail" in dict_retorno and dict_retorno["thumbnail"]:
+                                extras["urlImagem"] = dict_retorno["thumbnail"]
+
                             if extras:
                                 resposta["produto"]["infoAdicional"] = extras
             else:
@@ -357,6 +401,7 @@ def formatar_resposta_personalizada(dict_retorno: dict, codigo_gtin: str) -> dic
                 resposta["produto"] = None
                 logger.warning(f"Erro SEFAZ: cStat={resposta['cStat']}, xMotivo={resposta['xMotivo']}")
         return resposta
+
     except Exception as e:
         logger.error(f"Erro ao formatar resposta personalizada: {str(e)}")
         return {
@@ -767,10 +812,7 @@ async def root():
         }
     }
 )
-async def consultar_gtin(
-    codigo_gtin: str, 
-    timestamp: int = Depends(lambda: int(time.time()) // 3600)
-):
+async def consultar_gtin(codigo_gtin: str, timestamp: int = Depends(lambda: int(time.time()) // 3600)):
     """
     Consulta informações de um produto pelo código GTIN/EAN.
     
@@ -781,6 +823,7 @@ async def consultar_gtin(
     Returns:
         dict: Informações detalhadas do produto ou mensagem de erro
     """
+    logger.info("--------------------------------------------------")
     logger.info(f"Iniciando consulta para GTIN: {codigo_gtin}")
 
     # Validação do código GTIN
@@ -836,7 +879,6 @@ async def consultar_gtin(
     # Processamento da resposta
     try:
         dict_retorno = xmltodict.parse(xml_retorno)
-        dict_retorno = await enriquecer_com_eandata(dict_retorno, codigo_gtin)
         resposta_formatada = formatar_resposta_personalizada(dict_retorno, codigo_gtin)
         
         # Se não encontrou na SEFAZ, tenta na Bluesoft Cosmos
@@ -847,6 +889,9 @@ async def consultar_gtin(
                 resposta_bluesoft = formatar_resposta_bluesoft(dados_bluesoft, codigo_gtin)
                 if resposta_bluesoft:
                     logger.info(f"Produto encontrado na Bluesoft Cosmos: {codigo_gtin}")
+                    resposta_bluesoft = await enriquecer_com_eandata(resposta_bluesoft)
+                    logger.info(f"Dados do produto enviado para o EANData.com: {codigo_gtin}")
+                    logger.info("--------------------------------------------------")
                     return resposta_bluesoft
             
             # Se não encontrou em nenhuma base
@@ -861,6 +906,8 @@ async def consultar_gtin(
                     "xMotivo": "Produto não encontrado nas bases consultadas.",
                     "produto": None,
                 }
+        resposta_formatada = await enriquecer_com_eandata(resposta_formatada)
+        logger.info("--------------------------------------------------")
         return resposta_formatada
     except Exception as xml_error:
         logger.error(f"Erro ao processar XML: {str(xml_error)}")
@@ -872,6 +919,8 @@ async def consultar_gtin(
             resposta_bluesoft = formatar_resposta_bluesoft(dados_bluesoft, codigo_gtin)
             if resposta_bluesoft:
                 return resposta_bluesoft
+        # Se não encontrou em nenhuma base
+        logger.info("--------------------------------------------------")
         return {
             "status": "error",
             "cStat": "215",
