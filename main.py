@@ -6,7 +6,6 @@ import glob
 import hashlib
 import logging
 import logging.config
-from turtle import update
 import urllib
 from urllib3 import response
 import xmltodict
