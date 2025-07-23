@@ -1,4 +1,3 @@
-from dataclasses import field
 import os
 import re
 import time
@@ -6,22 +5,16 @@ import glob
 import hashlib
 import logging
 import logging.config
-import urllib
-from urllib3 import response
 import xmltodict
 import requests
-import json
 from requests_pkcs12 import Pkcs12Adapter
 from functools import wraps
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 import asyncio
-
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
-from fastapi import FastAPI, HTTPException, Depends
-# Modificando a importação do Pydantic para a versão 2.x
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, Depends
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # =========================
@@ -560,9 +553,9 @@ def formatar_resposta_bluesoft(dados_bluesoft: dict, codigo_gtin: str) -> dict:
         logger.error(f"Erro ao formatar resposta da Bluesoft: {str(e)}")
         return None
 
-# =========================
+# ===========================================================================
 # Extrai o peso ou volume de um produto a partir de uma string de descrição.
-# =========================
+# ===========================================================================
 def extrair_peso_unidade(descricao: str) -> dict:
     """
     Extrai o peso de um produto a partir de sua descrição e retorna a unidade padronizada,
