@@ -1,25 +1,28 @@
+# 1. Biblioteca padrão
 import os
 import re
 import time
-import glob
 import hashlib
 import logging
 import logging.config
-import xmltodict
-import requests
-from requests_pkcs12 import Pkcs12Adapter
 from functools import wraps
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
+from pathlib import Path
 import asyncio
+
+# 2. Terceiros
+import xmltodict
+import requests
+from requests_pkcs12 import Pkcs12Adapter
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 from fastapi import FastAPI, Depends
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# =========================
+# ===============================
 # Configurações com Pydantic v2
-# =========================
+# ===============================
 class Settings(BaseSettings):
     certificado_caminho: str
     certificado_senha: str
@@ -51,41 +54,122 @@ settings = Settings()
 # =========================
 # Configuração de Logging
 # =========================
-LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
-log_filename = os.path.join(LOG_DIR, f"gtin_api_{datetime.now().strftime('%Y%m%d')}.log")
 
+# Define o diretório base do projeto (o diretório do arquivo atual)
+BASE_DIR = Path(__file__).parent.resolve()
+
+# Define o diretório onde os logs serão armazenados
+LOG_DIR = BASE_DIR / "logs"
+
+# Cria o diretório de logs, incluindo diretórios-pai, se não existirem
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# Define o nome do arquivo de log, com data no formato AAAAMMDD
+log_filename = LOG_DIR / f"gtin_api_{datetime.now().strftime('%Y%m%d')}.log"
+
+# Dicionário de configuração do logging
 logging_config = {
-    "version": 1,
-    "disable_existing_loggers": False,
+    "version": 1,  # Versão da configuração (padrão é 1)
+    "disable_existing_loggers": False,  # Mantém loggers existentes ativos
     "formatters": {
-        "standard": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"}
+        "standard": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"  # Define formato padrão das mensagens de log
+        }
     },
     "handlers": {
+        # Handler para exibir logs no console
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "standard",
-            "level": "INFO",
+            # Em desenvolvimento mostra logs detalhados (DEBUG); em produção mostra apenas logs a partir de INFO.
+            "level": "DEBUG" if settings.ambiente == "desenvolvimento" else "INFO",
         },
+        # Handler para registrar logs em arquivo rotativo (com limite de tamanho e backups)
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
             "formatter": "standard",
-            "filename": log_filename,
-            "maxBytes": 10 * 1024 * 1024,  # 10 MB
-            "backupCount": 5,
-            "level": "INFO",
+            "filename": log_filename,  # Arquivo de log definido acima
+            "maxBytes": 10 * 1024 * 1024,  # Tamanho máximo de 10 MB por arquivo
+            "backupCount": 5,  # Mantém até 5 arquivos de backup
+            # Em desenvolvimento mostra logs detalhados (DEBUG); em produção mostra apenas logs a partir de INFO.
+            "level": "DEBUG" if settings.ambiente == "desenvolvimento" else "INFO",
         },
     },
     "loggers": {
+        # Logger principal do sistema (nome: gtin-api)
         "gtin-api": {
+            # Em desenvolvimento, loga no arquivo e no console; em produção, só no arquivo
             "handlers": ["file", "console"] if settings.ambiente == "desenvolvimento" else ["file"],
             "level": "INFO",
-            "propagate": False,
+            "propagate": False,  # Não propaga mensagens para loggers pai
         }
     },
 }
+
+# Aplica a configuração de logging definida acima
 logging.config.dictConfig(logging_config)
+
+# Obtém o logger 'gtin-api' para ser usado no projeto
 logger = logging.getLogger("gtin-api")
+
+# =================================================================================================================================
+# Remove arquivos de log antigos do diretório de logs, mantendo apenas os arquivos referentes aos últimos 'dias_para_manter' dias.
+# =================================================================================================================================
+def limpar_logs_antigos(dias_para_manter=30):
+    """
+    Remove arquivos de log antigos do diretório de logs, mantendo apenas os arquivos referentes aos últimos 'dias_para_manter' dias.
+
+    O nome dos arquivos de log deve seguir o padrão 'gtin_api_YYYYMMDD.log', onde 'YYYYMMDD' indica a data de criação.
+
+    Args:
+        dias_para_manter (int, opcional): Número de dias para manter os arquivos de log. 
+                                          Todos os arquivos mais antigos que esse período serão removidos. 
+                                          O padrão é 30 dias.
+
+    Detalhes:
+        - A função calcula a data limite a partir da data atual, subtraindo o número de dias informado.
+        - Apenas os arquivos de log cujo nome corresponde ao padrão e cuja data for anterior à data limite são removidos.
+        - Para cada arquivo removido, uma mensagem é registrada no log.
+        - Se algum erro ocorrer ao processar um arquivo, um aviso é registrado no log.
+        - Ao final, a função informa quantos arquivos foram removidos.
+
+    Exemplo de uso:
+        limpar_logs_antigos(15)  # Mantém logs dos últimos 15 dias, apaga o resto
+    """
+
+    logger.info(f"Iniciando limpeza de logs antigos (mantendo últimos {dias_para_manter} dias)")
+    
+    # Calcula a data limite: logs mais antigos que isso serão apagados
+    data_limite = datetime.now() - timedelta(days=dias_para_manter)
+    
+    # Caminho para o diretório de logs
+    log_dir = Path(LOG_DIR)
+    
+    # Lista todos os arquivos de log que seguem o padrão 'gtin_api_*.log'
+    arquivos_log = log_dir.glob("gtin_api_*.log")
+    
+    contador_removidos = 0  # Contador de arquivos removidos
+    
+    # Itera sobre cada arquivo de log encontrado
+    for arquivo in arquivos_log:
+        try:
+            # Extrai a data do nome do arquivo: 'gtin_api_YYYYMMDD.log'
+            data_str = arquivo.stem.replace("gtin_api_", "")  # Pega só o YYYYMMDD
+            
+            # Converte a string da data para um objeto datetime
+            data_arquivo = datetime.strptime(data_str, "%Y%m%d")
+            
+            # Se o arquivo for mais antigo que a data limite, remove o arquivo
+            if data_arquivo < data_limite:
+                arquivo.unlink()  # Remove o arquivo
+                contador_removidos += 1
+                logger.info(f"Log antigo removido: {arquivo.name}")
+        except Exception as e:
+            # Caso ocorra algum erro ao processar o arquivo, registra um aviso
+            logger.warning(f"Erro ao processar arquivo de log {arquivo.name}: {str(e)}")
+    
+    # Informa o total de arquivos removidos ao final do processo
+    logger.info(f"Limpeza de logs concluída. {contador_removidos} arquivos removidos.")
 
 # =========================
 # Utilitários e Cache
@@ -119,28 +203,6 @@ def flexible_cache(maxsize=128, ttl=3600):
         return wrapper
 
     return decorator
-
-def limpar_logs_antigos(dias_para_manter=30):
-    """
-    Remove arquivos de log com mais de 'dias_para_manter' dias.
-    """
-    logger.info(f"Iniciando limpeza de logs antigos (mantendo últimos {dias_para_manter} dias)")
-    data_limite = datetime.now() - timedelta(days=dias_para_manter)
-    padrao_arquivo = os.path.join(LOG_DIR, "gtin_api_*.log")
-    arquivos_log = glob.glob(padrao_arquivo)
-    contador_removidos = 0
-    for arquivo in arquivos_log:
-        nome_arquivo = os.path.basename(arquivo)
-        try:
-            data_str = nome_arquivo.replace("gtin_api_", "").replace(".log", "")
-            data_arquivo = datetime.strptime(data_str, "%Y%m%d")
-            if data_arquivo < data_limite:
-                os.remove(arquivo)
-                contador_removidos += 1
-                logger.info(f"Log antigo removido: {nome_arquivo}")
-        except Exception as e:
-            logger.warning(f"Erro ao processar arquivo de log {nome_arquivo}: {str(e)}")
-    logger.info(f"Limpeza de logs concluída. {contador_removidos} arquivos removidos.")
 
 # =========================
 # Validação de GTIN
@@ -471,7 +533,7 @@ async def consultar_bluesoft_cosmos(codigo_gtin: str) -> dict:
                 response = await client.get(url, headers=headers)
                 if response.status_code == 200:
                     token_manager.increment_usage(token)
-                    return response.json()
+                    # Retorno movido para fora do bloco try para evitar duplicação
                 elif response.status_code == 404:
                     token_manager.increment_usage(token)
                     logger.info(f"Produto não encontrado na API Bluesoft Cosmos: {codigo_gtin}")
@@ -500,7 +562,9 @@ async def consultar_bluesoft_cosmos(codigo_gtin: str) -> dict:
             except Exception as e:
                 logger.error(f"Erro ao consultar API Bluesoft Cosmos: {str(e)}")
                 return None
-            break
+            # Sucesso na requisição, sai do loop
+            return response.json()
+    # Se chegou aqui, todas as tentativas falharam
     return None
 
 def formatar_resposta_bluesoft(dados_bluesoft: dict, codigo_gtin: str) -> dict:
