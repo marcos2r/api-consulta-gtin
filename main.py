@@ -886,7 +886,7 @@ async def consultar_gtin(codigo_gtin: str, timestamp: int = Depends(lambda: int(
             "xMotivo": "Erro de configuração do servidor. Contate o administrador.",
             "produto": None,
         }
-    if not os.path.isfile(pfx_file):
+    if not Path(pfx_file).is_file():
         logger.error(f"Arquivo de certificado não encontrado: {pfx_file}")
         return {
             "status": "error",
