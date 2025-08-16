@@ -16,7 +16,7 @@ import xmltodict
 import requests
 from requests_pkcs12 import Pkcs12Adapter
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, RetryError, retry_if_exception_type, before_sleep_log
 from fastapi import FastAPI, Depends
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -368,7 +368,13 @@ def validate_gtin(gtin_code: str) -> bool:
 # =================================================================================
 # Consulta informações de um produto através do código GTIN no webservice da SEFAZ 
 # =================================================================================
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(Exception),
+    reraise=True,  # propaga a última exceção real após esgotar as tentativas
+    before_sleep=before_sleep_log(logger, logging.ERROR),  # loga cada retry com a causa
+)
 def consultar_gtin_pfx(gtin: str, pfx_file: str, pfx_password: str) -> str:
     """
     Consulta informações de um produto através do código GTIN no webservice da SEFAZ 
@@ -1498,12 +1504,55 @@ async def consultar_gtin(codigo_gtin: str, timestamp: int = Depends(lambda: int(
             "produto": None,
         }
 
-    # Consulta ao webservice da SEFAZ
+    # Consulta ao webservice da SEFAZ (com retry verboso) + fallback Bluesoft
     try:
         loop = asyncio.get_event_loop()
-        xml_retorno = await loop.run_in_executor(None, consultar_gtin_pfx_cached, codigo_gtin, pfx_file, pfx_password)
+        xml_retorno = await loop.run_in_executor(
+            None, consultar_gtin_pfx_cached, codigo_gtin, pfx_file, pfx_password
+        )
+
+    except RetryError as e:
+        # Tenacity esgotou as tentativas; captura a causa raiz
+        raiz = e.last_attempt.exception()
+        logger.error(f"Falha na consulta ao webservice SEFAZ: {type(raiz).__name__} - {raiz!r}")
+        logger.info(f"Erro SEFAZ detectado. Ativando fallback Bluesoft Cosmos para GTIN: {codigo_gtin}")
+
+        dados_bluesoft = await consultar_bluesoft_cosmos(codigo_gtin)
+        if dados_bluesoft:
+            resposta_bluesoft = formatar_resposta_bluesoft(dados_bluesoft, codigo_gtin)
+            if resposta_bluesoft:
+                logger.info(f"Produto encontrado na Bluesoft Cosmos: {codigo_gtin}")
+                resposta_bluesoft = await enriquecer_com_eandata(resposta_bluesoft)
+                logger.info(f"Dados do produto enviado para o EANData.com: {codigo_gtin}")
+                logger.info("--------------------------------------------------")
+                return resposta_bluesoft
+
+        logger.info("--------------------------------------------------")
+        return {
+            "status": "error",
+            "provider": "PAIRUS Soluções Tecnológicas",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "cStat": "226",
+            "xMotivo": "Produto não encontrado nas bases consultadas.",
+            "produto": None,
+        }
+
     except Exception as e:
-        logger.error(f"Falha na consulta ao webservice SEFAZ: {str(e)}")
+        # Outras falhas não cobertas pelo RetryError
+        logger.error(f"Falha na consulta ao webservice SEFAZ: {type(e).__name__} - {e}")
+        logger.info(f"Erro SEFAZ detectado. Ativando fallback Bluesoft Cosmos para GTIN: {codigo_gtin}")
+
+        dados_bluesoft = await consultar_bluesoft_cosmos(codigo_gtin)
+        if dados_bluesoft:
+            resposta_bluesoft = formatar_resposta_bluesoft(dados_bluesoft, codigo_gtin)
+            if resposta_bluesoft:
+                logger.info(f"Produto encontrado na Bluesoft Cosmos: {codigo_gtin}")
+                resposta_bluesoft = await enriquecer_com_eandata(resposta_bluesoft)
+                logger.info(f"Dados do produto enviado para o EANData.com: {codigo_gtin}")
+                logger.info("--------------------------------------------------")
+                return resposta_bluesoft
+
+        logger.info("--------------------------------------------------")
         return {
             "status": "error",
             "provider": "PAIRUS Soluções Tecnológicas",
