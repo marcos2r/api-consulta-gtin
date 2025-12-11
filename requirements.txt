@@ -26,3 +26,4 @@ typing_extensions==4.13.1
 urllib3==2.3.0
 uvicorn==0.34.0
 xmltodict==0.14.2
+gunicorn==21.2.0

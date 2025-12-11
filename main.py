@@ -18,6 +18,7 @@ from requests_pkcs12 import Pkcs12Adapter
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError, retry_if_exception_type, before_sleep_log
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ===============================
@@ -1345,6 +1346,18 @@ app = FastAPI(
     docs_url="/",
     redoc_url="/redoc",
 )
+
+# Configuração de CORS
+# Permite que a API seja acessada por navegadores de diferentes origens
+if settings.cors_origins:
+    origins = [origin.strip() for origin in settings.cors_origins.split(",")]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 @app.get("/", 
     tags=["Documentação"],
