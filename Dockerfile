@@ -28,4 +28,4 @@ EXPOSE 8000
 
 # Comando para iniciar a aplicação usando Gunicorn com workers Uvicorn
 # Ajuste o número de workers conforme necessário ou use variável de ambiente
-CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
+CMD ["gunicorn", "src.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]

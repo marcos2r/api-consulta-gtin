@@ -217,8 +217,8 @@ api-consulta-gtin/
 - **Logging:**  
   A API utiliza um sistema de logging configurado via `logging.config.dictConfig`. Os logs são armazenados em arquivos rotativos no diretório `logs/` com tamanho máximo de 10 MB por arquivo e até 5 backups.
 
-- **Cache:**  
-  O decorator `flexible_cache` é utilizado para armazenar respostas de consultas GTIN por até 1 hora (TTL de 3600 segundos). Em ambientes de alta demanda, considere migrar para uma solução de cache distribuído, como o Redis.
+- **Cache Centralizado:**  
+  A execução de cache da API utiliza integração nativa com um Server **Redis**. O suporte distribuído evita gargalos entre os workers do Uvicorn e expira registros após 1 hora (TTL de 3600 segundos). Isso suporta um deploy clusterizado.
 
 ## Gerenciamento de Tokens
 
@@ -228,17 +228,16 @@ A API implementa um sistema de gerenciamento e rotação de tokens para a API Bl
 
 ## Deploy
 
-Para ambientes de produção, recomenda-se:
-
-- Desabilitar o modo de recarregamento automático (`--reload`).
-- Configurar um servidor ASGI robusto (por exemplo, utilizando Gunicorn em conjunto com Uvicorn Workers).
-- Garantir que as variáveis de ambiente estejam devidamente configuradas e seguras.
-- Configurar monitoramento e backups para os arquivos de log.
-
-Exemplo de comando para produção:
+Para ambientes de produção, recomenda-se fortemente o uso de **Containers via Docker Compose**, para orquestrar a API junto do serviço de Cache (Redis).
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 80
+docker-compose up -d --build
+```
+
+O compose utilizará o Gunicorn em conjunto com Uvicorn Workers. Alternativamente para rodar manual, não esqueça do servidor Redis configurado:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ## Licença

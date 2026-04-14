@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: api_consulta_gtin
+    ports:
+      - "8000:8000"
+    environment:
+      - AMBIENTE=producao
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      # IMPORTANTE: Descomente a linha abaixo e certifique-se de que cert.pfx não é copiado ativamente (ver .dockerignore)
+      # - ./cert.pfx:/app/cert.pfx:ro 
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  redis_data:
