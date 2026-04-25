@@ -3,6 +3,9 @@ venv/
 env/
 .env
 
+# Configurações AWS Críticas
+ecs-task-definition.json
+
 # Certificados
 *.pfx
 *.p12
