@@ -28,3 +28,6 @@ uvicorn==0.34.0
 xmltodict==0.14.2
 gunicorn==21.2.0
 redis==5.0.4
+pytest
+pytest-asyncio
+pytest-mock

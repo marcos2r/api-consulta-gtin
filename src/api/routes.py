@@ -14,6 +14,24 @@ router = APIRouter()
 
 @router.get("/gtin/{codigo_gtin}", summary="Consulta Dados do GTIN", response_description="Retorna dados detalhados do GTIN")
 async def consultar_gtin(codigo_gtin: str):
+    """Rota principal para consulta de informações de produtos por código GTIN/EAN.
+    
+    Tenta primeiramente consultar a base da SEFAZ. Caso não encontre ou a base esteja
+    indisponível (via Circuit Breaker ou erro de rede), realiza fallback automático para
+    a API da Bluesoft Cosmos. Os dados de ambas as fontes são potencialmente enriquecidos
+    pela base da EANdata.
+    
+    Args:
+        codigo_gtin (str): Código GTIN/EAN numérico com 8, 12, 13 ou 14 dígitos.
+        
+    Returns:
+        dict: Resposta formatada no padrão NF-e com os dados do produto.
+        
+    Raises:
+        HTTPException(400): Se o código GTIN for inválido.
+        HTTPException(404): Se o produto não for encontrado nem na SEFAZ nem na Bluesoft.
+        HTTPException(500): Falhas sistêmicas irrecuperáveis.
+    """
     logger.info(f"Nova requisição de consulta recebida para GTIN: {codigo_gtin}")
     if not validate_gtin(codigo_gtin):
         logger.warning(f"GTIN inválido recebido: {codigo_gtin}")
@@ -26,9 +44,14 @@ async def consultar_gtin(codigo_gtin: str):
         xml_retorno = await consultar_gtin_pfx_cached_async(codigo_gtin, pfx_file, pfx_password)
         if xml_retorno:
             dict_retorno = xmltodict.parse(xml_retorno)
-            dict_retorno = enriquecer_com_eandata(codigo_gtin, dict_retorno)
-            logger.info(f"Consulta finalizada com sucesso para GTIN: {codigo_gtin}")
-            return formatar_resposta_personalizada(dict_retorno, codigo_gtin)
+            dict_retorno = await enriquecer_com_eandata(codigo_gtin, dict_retorno)
+            resposta_sefaz = formatar_resposta_personalizada(dict_retorno, codigo_gtin)
+            
+            if resposta_sefaz.get("status") == "success":
+                logger.info(f"Consulta finalizada com sucesso para GTIN na SEFAZ: {codigo_gtin}")
+                return resposta_sefaz
+            else:
+                logger.warning(f"SEFAZ não encontrou o produto (cStat: {resposta_sefaz.get('cStat')}). Executando fallback Cosmos.")
         else:
             logger.warning(f"Resposta vazia da SEFAZ para GTIN: {codigo_gtin}. Executando fallback Cosmos.")
     except Exception as e:
@@ -53,4 +76,9 @@ async def consultar_gtin(codigo_gtin: str):
 
 @router.get("/health", summary="Verificação de Saúde")
 def health_check():
+    """Rota de Liveness/Readiness Probe para verificação de status da API.
+    
+    Returns:
+        dict: Status de operação atual do microsserviço.
+    """
     return {"status": "ok", "message": "API de consulta GTIN está operante."}

@@ -6,7 +6,13 @@ from src.core.logging_setup import logger
 from src.core.config import settings
 
 class TokenManager:
+    """Gerenciador de tokens para a API Bluesoft Cosmos.
+    
+    Implementa um sistema de rotação de tokens para contornar limites diários (rate limit),
+    garantindo que cada token não ultrapasse 25 consultas por dia.
+    """
     def __init__(self):
+        """Inicializa o gerenciador e carrega os tokens disponíveis na configuração."""
         self.tokens = []
         self.current_index = 0
         self.usage_count = {}
@@ -14,6 +20,7 @@ class TokenManager:
         self.load_tokens()
 
     def load_tokens(self):
+        """Lê as chaves de API da Bluesoft a partir das variáveis de ambiente."""
         main_token = settings.cosmos_api_token
         if main_token:
             self.tokens.append(main_token)
@@ -28,7 +35,14 @@ class TokenManager:
             i += 1
         logger.info(f"Carregados {len(self.tokens)} tokens para a API Bluesoft Cosmos")
 
-    def get_token(self):
+    def get_token(self) -> str | None:
+        """Obtém um token válido com limite diário não excedido.
+        
+        Caso tenha mudado de dia, reseta os contadores de uso automaticamente.
+        
+        Returns:
+            str | None: Token disponível ou None se todos atingiram o limite.
+        """
         today = datetime.now().date()
         if today > self.last_reset_date:
             self.reset_usage_counts()
@@ -43,19 +57,36 @@ class TokenManager:
         logger.warning("Todos os tokens da API Bluesoft Cosmos atingiram o limite diário")
         return None
 
-    def increment_usage(self, token):
+    def increment_usage(self, token: str):
+        """Registra o uso de um token específico, incrementando seu contador diário.
+        
+        Args:
+            token (str): O token utilizado.
+        """
         if token in self.usage_count:
             self.usage_count[token] += 1
             logger.info(f"Token Bluesoft: {token[:8]}... - Uso: {self.usage_count[token]}/25")
 
     def reset_usage_counts(self):
+        """Reinicia todos os contadores de uso (executado na virada do dia)."""
         for token in self.tokens:
             self.usage_count[token] = 0
         logger.info("Contadores de uso dos tokens Bluesoft resetados (novo dia)")
 
 token_manager = TokenManager()
 
-async def consultar_bluesoft_cosmos(codigo_gtin: str) -> dict:
+async def consultar_bluesoft_cosmos(codigo_gtin: str) -> dict | None:
+    """Consulta informações do produto na API REST da Bluesoft Cosmos (Fallback).
+    
+    Utiliza httpx.AsyncClient para não bloquear o event loop. Lida automaticamente com erros
+    de limite de requisições (429), acionando a rotação de token do TokenManager.
+    
+    Args:
+        codigo_gtin (str): Código GTIN/EAN do produto.
+        
+    Returns:
+        dict | None: Dicionário com os dados JSON da API, ou None em caso de falha/inexistência.
+    """
     gtin_seguro = re.sub(r'[^\d]', '', codigo_gtin)
     token = token_manager.get_token()
     if not token:
