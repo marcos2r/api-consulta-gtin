@@ -3,7 +3,8 @@ import base64
 import os
 import tempfile
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from src.core.logging_setup import logger
+import logging
+logger = logging.getLogger("gtin-api")
 
 class Settings(BaseSettings):
     certificado_caminho: str | None = None
