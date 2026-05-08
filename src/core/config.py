@@ -1,9 +1,14 @@
 import redis.asyncio as redis
+import base64
+import os
+import tempfile
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from src.core.logging_setup import logger
 
 class Settings(BaseSettings):
-    certificado_caminho: str
-    certificado_senha: str
+    certificado_caminho: str | None = None
+    certificado_senha: str | None = None
+    certificado_base64: str | None = None
     eandata_api_key: str | None = None
     eandata_url: str | None = None
     cosmos_api_token: str | None = None
@@ -25,8 +30,21 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     allowed_hosts: str = "localhost"
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
 
+# Tratamento do certificado base64 (GCP Secret Manager)
+if settings.certificado_base64:
+    try:
+        temp_cert_path = os.path.join(tempfile.gettempdir(), "cert_gcp.pfx")
+        cert_data = base64.b64decode(settings.certificado_base64)
+        with open(temp_cert_path, "wb") as f:
+            f.write(cert_data)
+        settings.certificado_caminho = temp_cert_path
+        logger.info("Certificado digital carregado a partir de Base64 e salvo temporariamente.")
+    except Exception as e:
+        logger.error(f"Erro ao processar certificado_base64: {str(e)}")
+
+# Cliente Redis (Lazy connection)
 redis_client = redis.from_url(settings.redis_url, decode_responses=True)
