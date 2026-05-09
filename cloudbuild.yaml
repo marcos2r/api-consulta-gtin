@@ -17,7 +17,7 @@ steps:
       - '--image'
       - 'gcr.io/$PROJECT_ID/api-consulta-gtin:$COMMIT_SHA'
       - '--region'
-      - 'southamerica-east1'
+      - 'us-east1'
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
