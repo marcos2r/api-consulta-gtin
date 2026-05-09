@@ -27,5 +27,5 @@ COPY . .
 EXPOSE 8000
 
 # Comando para iniciar a aplicação usando Gunicorn com workers Uvicorn
-# Ajustado para Cloud Run: utiliza formato shell para injetar a porta dinâmica ($PORT)
-CMD gunicorn src.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:${PORT:-8000}
+# Ajustado para Cloud Run: 1 worker (recomendado) e timeout desativado (gerenciado pelo Cloud Run)
+CMD gunicorn src.main:app -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:${PORT:-8000} --timeout 0
