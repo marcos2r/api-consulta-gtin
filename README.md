@@ -204,12 +204,22 @@ A API ficará disponível no endereço [http://127.0.0.1:8000](http://127.0.0.1:
 
 ## Estrutura do Projeto
 
-```
+A aplicação segue uma **Arquitetura em Camadas (Layered Architecture)**, desenhada para manter baixo acoplamento e alta testabilidade:
+
+```text
 api-consulta-gtin/
-├── main.py           # Código principal da API (FastAPI, endpoints e lógica de negócio)
-├── .env              # Variáveis de ambiente
-├── requirements.txt  # Dependências do projeto
-└── logs/             # Diretório onde os arquivos de log são armazenados
+├── src/
+│   ├── api/            # Controllers e definição das rotas HTTP (FastAPI)
+│   ├── use_cases/      # Regras de negócio e orquestração (Sefaz -> Cosmos -> Firestore)
+│   ├── repositories/   # Acesso a dados persistentes (Google Cloud Firestore)
+│   ├── schemas/        # Modelos Pydantic para validação estrita de I/O
+│   ├── services/       # Integrações com APIs externas (Sefaz, Bluesoft, EANdata)
+│   ├── utils/          # Funções utilitárias (formatações, validações numéricas)
+│   ├── core/           # Configurações gerais (Settings, Logging)
+│   └── main.py         # Entrypoint da aplicação
+├── tests/              # Suíte de testes unitários com pytest e mocks
+├── .env                # Variáveis de ambiente secretas
+└── requirements.txt    # Dependências do projeto
 ```
 
 ## Logging e Cache
@@ -217,8 +227,8 @@ api-consulta-gtin/
 - **Logging:**  
   A API utiliza um sistema de logging configurado via `logging.config.dictConfig`. Os logs são armazenados em arquivos rotativos no diretório `logs/` com tamanho máximo de 10 MB por arquivo e até 5 backups.
 
-- **Cache Centralizado:**  
-  A execução de cache da API utiliza integração nativa com um Server **Redis**. O suporte distribuído evita gargalos entre os workers do Uvicorn e expira registros após 1 hora (TTL de 3600 segundos). Isso suporta um deploy clusterizado.
+- **Cache Primário de Resiliência:**  
+  A execução de cache da API utiliza integração com o **Google Cloud Firestore**. Essa abordagem "serverless" evita gargalos de infraestrutura local, eliminando a dependência de serviços extras como Redis, e garante que as respostas sejam servidas diretamente do banco em `CACHE HIT`.
 
 ## Gerenciamento de Tokens
 
@@ -228,8 +238,9 @@ A API implementa um sistema de gerenciamento e rotação de tokens para a API Bl
 
 ## Deploy
 
-Para ambientes de produção, recomenda-se fortemente o uso de **Containers via Docker Compose**, para orquestrar a API junto do serviço de Cache (Redis).
+Para ambientes de produção, recomenda-se o deploy via Cloud Run, aproveitando os recursos serverless configurados no `cloudbuild.yaml`.
 
+Para rodar via docker-compose (opcional e para testes robustos):
 ```bash
 docker-compose up -d --build
 ```

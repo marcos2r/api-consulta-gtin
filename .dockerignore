@@ -42,3 +42,5 @@ logs/
 # Outros
 Dockerfile
 .dockerignore
+firebase-key.json
+*.pfx

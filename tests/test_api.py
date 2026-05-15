@@ -13,13 +13,16 @@ def test_consultar_gtin_invalido(client):
     assert response.status_code == 400
     assert "inválido" in response.json()["detail"].lower()
 
-def test_consultar_gtin_sefaz_mockado(client, mock_redis, mock_sefaz_success, mocker):
+def test_consultar_gtin_sefaz_mockado(client, mock_sefaz_success, mocker):
     """Verifica se a rota responde corretamente quando a SEFAZ encontra o produto."""
-    # Mock do EANdata para não fazer requisição real durante o teste
-    mocker.patch("src.services.eandata_client.enriquecer_com_eandata", return_value={"mock": "data"})
+    # Mock do EANdata preservando o dict_retorno da SEFAZ
+    async def mock_enriquecer(gtin, dict_retorno):
+        dict_retorno["eandata"] = {"status": {"code": "200"}, "product": {}}
+        return dict_retorno
+    mocker.patch("src.use_cases.consultar_gtin.enriquecer_com_eandata", side_effect=mock_enriquecer)
     
     # Bypass na validação do GTIN para facilitar o teste com qualquer código válido estruturalmente
-    mocker.patch("src.api.routes.validate_gtin", return_value=True)
+    mocker.patch("src.use_cases.consultar_gtin.validate_gtin", return_value=True)
     
     response = client.get("/gtin/7891234567890")
     

@@ -1,7 +1,9 @@
 # Ambiente virtual
 venv/
+.venv/
 env/
 .env
+firebase-key.json
 
 # Configurações AWS Críticas
 ecs-task-definition.json
@@ -12,6 +14,7 @@ ecs-task-definition.json
 *.pem
 *.key
 *.crt
+cert_base64.txt
 
 # Logs
 logs/

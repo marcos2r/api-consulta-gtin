@@ -1,7 +1,7 @@
-import redis.asyncio as redis
 import base64
 import os
 import tempfile
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import logging
 logger = logging.getLogger("gtin-api")
@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     eandata_api_key: str | None = None
     eandata_url: str | None = None
     cosmos_api_token: str | None = None
-    redis_url: str = "redis://localhost:6379/0"
     ambiente: str = "producao"
     ignorar_ssl: bool = False
     contato_nome: str = "Suporte Técnico"
@@ -22,7 +21,7 @@ class Settings(BaseSettings):
     
     # Campos adicionais encontrados no .env
     ignorar_ssl_sefaz: bool = False  
-    sefaz_api_url: str = "https://dfe-portal.svrs.rs.gov.br/ws/ccgConsGTIN/ccgConsGTIN.asmx"
+    sefaz_api_url: str = "https://dfe-servico.svrs.rs.gov.br/ws/ccgConsGTIN/ccgConsGTIN.asmx"
     cosmos_api_token_1: str | None = None
     cosmos_api_token_2: str | None = None
     cosmos_api_token_3: str | None = None
@@ -30,6 +29,7 @@ class Settings(BaseSettings):
     cosmos_api_token_5: str | None = None
     cors_origins: str = "*"
     allowed_hosts: str = "localhost"
+    google_application_credentials: str | None = Field(default=None, validation_alias="GOOGLE_APPLICATION_CREDENTIALS")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -47,5 +47,3 @@ if settings.certificado_base64:
     except Exception as e:
         logger.error(f"Erro ao processar certificado_base64: {str(e)}")
 
-# Cliente Redis (Lazy connection)
-redis_client = redis.from_url(settings.redis_url, decode_responses=True)

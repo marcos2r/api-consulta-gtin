@@ -8,7 +8,7 @@ from requests_pkcs12 import Pkcs12Adapter
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from src.core.logging_setup import logger
-from src.core.config import settings, redis_client
+from src.core.config import settings
 
 class CircuitBreaker:
     """Implementa o padrão Circuit Breaker para evitar chamadas contínuas a serviços inativos.
@@ -121,7 +121,7 @@ def consultar_gtin_pfx(gtin: str, pfx_file: str, pfx_password: str) -> str:
         session.close()
 
 async def consultar_gtin_pfx_cached_async(gtin: str, pfx_file: str, pfx_password: str) -> str:
-    """Consulta o webservice da SEFAZ com verificação no Redis Cache e proteção de Circuit Breaker.
+    """Consulta o webservice da SEFAZ com proteção de Circuit Breaker.
     
     A chamada ao webservice é encapsulada em um ThreadPoolExecutor para evitar bloqueio do Event Loop,
     já que `requests` é síncrono.
@@ -132,7 +132,7 @@ async def consultar_gtin_pfx_cached_async(gtin: str, pfx_file: str, pfx_password
         pfx_password (str): Senha do certificado digital.
         
     Returns:
-        str: Conteúdo XML da SEFAZ, seja proveniente do cache ou da chamada em tempo real.
+        str: Conteúdo XML da SEFAZ retornado pela chamada em tempo real.
         
     Raises:
         Exception: Quando a SEFAZ falha persistentemente ou o Circuit Breaker está aberto.
@@ -140,18 +140,6 @@ async def consultar_gtin_pfx_cached_async(gtin: str, pfx_file: str, pfx_password
     if not circuit_breaker.can_execute():
         logger.warning(f"Circuit Breaker ABERTO. Interrompendo chamada para SEFAZ (GTIN: {gtin}).")
         raise Exception("Circuit Breaker ABERTO: Serviço SEFAZ inoperante no momento.")
-
-    key_parts = ["consultar_gtin_pfx", gtin, pfx_file, pfx_password]
-    key = hashlib.md5(":".join(key_parts).encode()).hexdigest()
-    cache_key = f"cache:gtin:{key}"
-    
-    try:
-        cached_result = await redis_client.get(cache_key)
-        if cached_result:
-            logger.info(f"CACHE HIT (Redis) para GTIN: {gtin}")
-            return cached_result
-    except Exception as e:
-        logger.warning(f"Erro ao acessar cache no Redis: {e}")
         
     loop = asyncio.get_running_loop()
     try:
@@ -160,10 +148,5 @@ async def consultar_gtin_pfx_cached_async(gtin: str, pfx_file: str, pfx_password
     except Exception as e:
         circuit_breaker.record_failure()
         raise e
-    
-    try:
-        await redis_client.setex(cache_key, 3600, result)
-    except Exception as e:
-        logger.warning(f"Erro ao salvar no cache do Redis: {e}")
         
     return result

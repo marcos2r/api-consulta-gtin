@@ -11,9 +11,8 @@ def formatar_resposta_personalizada(dict_retorno: dict, codigo_gtin: str) -> dic
             "produto": {}
         }
 
-        ret_cons_gtin_dict = buscar_chave(dict_retorno, "retConsGTIN")
-        if ret_cons_gtin_dict and "retConsGTIN" in ret_cons_gtin_dict:
-            ret_cons_gtin = ret_cons_gtin_dict["retConsGTIN"]
+        ret_cons_gtin = buscar_chave(dict_retorno, "retConsGTIN")
+        if ret_cons_gtin:
             if ret_cons_gtin.get("xMotivo") == "Consulta realizada com sucesso":
                 resposta["produto"] = {
                     "GTIN": ret_cons_gtin.get("GTIN", codigo_gtin),
@@ -71,6 +70,13 @@ def formatar_resposta_personalizada(dict_retorno: dict, codigo_gtin: str) -> dic
                 resposta["xMotivo"] = ret_cons_gtin.get("xMotivo", "Erro na consulta SEFAZ")
                 resposta["produto"] = None
                 logger.warning(f"Erro SEFAZ: cStat={resposta['cStat']}, xMotivo={resposta['xMotivo']}")
+        else:
+            resposta["status"] = "error"
+            resposta["cStat"] = "999"
+            resposta["xMotivo"] = "Resposta da SEFAZ inválida ou sem retConsGTIN"
+            resposta["produto"] = None
+            logger.warning("Erro SEFAZ: XML não contém retConsGTIN")
+        
         return resposta
 
     except Exception as e:
