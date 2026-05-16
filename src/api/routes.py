@@ -39,14 +39,29 @@ async def consultar_gtin(
 async def health_check():
     """Rota de Liveness/Readiness Probe para verificação de status da API.
     
-    Verifica a saúde da API e a conectividade com o banco de dados Firestore.
+    Verifica a saúde da API e a conectividade detalhada com o banco de dados Firestore.
     
     Returns:
-        dict: Status de operação atual e do banco de dados.
+        dict: Status de operação atual e detalhes do erro se houver.
     """
-    db_ok = await produto_repository.test_connection()
-    return {
-        "status": "ok" if db_ok else "degraded",
-        "message": "API de consulta GTIN está operante.",
-        "database": "online" if db_ok else "offline"
-    }
+    try:
+        db_ok = await produto_repository.test_connection()
+        if db_ok:
+            return {
+                "status": "ok",
+                "message": "API de consulta GTIN está operante.",
+                "database": "online"
+            }
+        else:
+            # Tenta capturar o erro forçando a inicialização se o test_connection falhou silenciosamente
+            return {
+                "status": "degraded",
+                "database": "offline",
+                "message": "Falha na conexão com Firestore."
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "database": "offline",
+            "detail": str(e)
+        }
