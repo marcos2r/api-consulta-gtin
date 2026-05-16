@@ -13,7 +13,8 @@ async def lifespan(app: FastAPI):
     limpar_logs_antigos(30)
     
     # Teste de conexão com o banco no startup
-    if await produto_repository.test_connection():
+    db_ok, _ = await produto_repository.test_connection()
+    if db_ok:
         logger.info("Verificação de banco de dados: ONLINE")
     else:
         logger.error("Verificação de banco de dados: OFFLINE")

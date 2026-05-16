@@ -45,7 +45,7 @@ async def health_check():
         dict: Status de operação atual e detalhes do erro se houver.
     """
     try:
-        db_ok = await produto_repository.test_connection()
+        db_ok, error = await produto_repository.test_connection()
         if db_ok:
             return {
                 "status": "ok",
@@ -53,11 +53,11 @@ async def health_check():
                 "database": "online"
             }
         else:
-            # Tenta capturar o erro forçando a inicialização se o test_connection falhou silenciosamente
             return {
                 "status": "degraded",
                 "database": "offline",
-                "message": "Falha na conexão com Firestore."
+                "message": "Falha na conexão com Firestore.",
+                "detail": error
             }
     except Exception as e:
         return {
