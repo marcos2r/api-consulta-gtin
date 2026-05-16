@@ -36,10 +36,17 @@ async def consultar_gtin(
     return await use_case.executar(codigo_gtin, background_tasks)
 
 @router.get("/health", summary="Verificação de Saúde")
-def health_check():
+async def health_check():
     """Rota de Liveness/Readiness Probe para verificação de status da API.
     
+    Verifica a saúde da API e a conectividade com o banco de dados Firestore.
+    
     Returns:
-        dict: Status de operação atual do microsserviço.
+        dict: Status de operação atual e do banco de dados.
     """
-    return {"status": "ok", "message": "API de consulta GTIN está operante."}
+    db_ok = await produto_repository.test_connection()
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "message": "API de consulta GTIN está operante.",
+        "database": "online" if db_ok else "offline"
+    }

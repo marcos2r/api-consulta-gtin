@@ -72,5 +72,20 @@ class ProdutoRepository:
         except Exception as e:
             logger.error(f"Erro ao salvar no Firestore para GTIN {gtin}: {e}")
 
+    async def test_connection(self) -> bool:
+        """Realiza um teste de conectividade simples com o Firestore.
+        
+        Returns:
+            bool: True se a conexão estiver ativa, False caso contrário.
+        """
+        try:
+            # Tenta apenas listar um documento de forma limitada para checar permissão/conexão
+            async for _ in self.db.collection(self.collection_name).limit(1).stream():
+                break
+            return True
+        except Exception as e:
+            logger.error(f"Falha no teste de conexão com Firestore: {e}")
+            return False
+
 # Instância global (Singleton pattern simplificado)
 produto_repository = ProdutoRepository()
