@@ -47,18 +47,22 @@ class ConsultarGtinUseCase:
         # 1. Tenta buscar no banco de dados local (Cache no Firestore)
         produto_cache = await self.produto_repo.buscar_por_gtin(codigo_gtin)
         if produto_cache:
-            # Reconstroi o dicionário para casar com o ProdutoResponse
+            logger.info(f"Retornando dados do cache para GTIN: {codigo_gtin}")
+            # Mapeia os campos salvos de volta para o formato do ProdutoResponse
             return {
                 "status": "success",
                 "provider": "PAIRUS Soluções Tecnológicas",
+                "cStat": "100",
+                "xMotivo": "Consulta realizada com sucesso (Cache)",
                 "produto": {
                     "GTIN": codigo_gtin,
-                    "xProd": produto_cache.get("descricao", "Descrição Indisponível"),
-                    "NCM": produto_cache.get("ncm", "N/A"),
-                    "fonte": produto_cache.get("fonte", "Banco de Dados Interno (Cache)"),
-                    "infoAdicional": {
-                        "urlImagem": produto_cache.get("imagem")
-                    } if produto_cache.get("imagem") else None
+                    "tpGTIN": produto_cache.get("tpGTIN"),
+                    "xProd": produto_cache.get("xProd", "Descrição Indisponível"),
+                    "NCM": produto_cache.get("NCM"),
+                    "CEST": produto_cache.get("CEST"),
+                    "fonte": produto_cache.get("fonte", "Cache Firestore"),
+                    "atualizado": True,
+                    "infoAdicional": produto_cache.get("infoAdicional")
                 }
             }
 
@@ -78,13 +82,11 @@ class ConsultarGtinUseCase:
                     produto_info = resposta_sefaz.get("produto", {})
                     info_adc = produto_info.get("infoAdicional", {})
                     
+                    # Salva o objeto produto completo para manter consistência no cache
                     dados_salvar = {
-                        "descricao": produto_info.get("xProd"),
-                        "ncm": produto_info.get("NCM"),
+                        **produto_info,
                         "fonte": "SEFAZ / EANdata"
                     }
-                    if info_adc and info_adc.get("urlImagem"):
-                        dados_salvar["imagem"] = info_adc.get("urlImagem")
                         
                     # Agenda o salvamento no banco de forma assíncrona
                     background_tasks.add_task(self.produto_repo.salvar, codigo_gtin, dados_salvar)
@@ -108,13 +110,11 @@ class ConsultarGtinUseCase:
                 produto_info = resposta_cosmos.get("produto", {})
                 info_adc = produto_info.get("infoAdicional", {})
                 
+                # Salva o objeto produto completo do Cosmos
                 dados_salvar = {
-                    "descricao": produto_info.get("xProd"),
-                    "ncm": produto_info.get("NCM"),
+                    **produto_info,
                     "fonte": "Bluesoft Cosmos"
                 }
-                if info_adc and info_adc.get("urlImagem"):
-                    dados_salvar["imagem"] = info_adc.get("urlImagem")
                 
                 background_tasks.add_task(self.produto_repo.salvar, codigo_gtin, dados_salvar)
                 return resposta_cosmos
