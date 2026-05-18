@@ -1,4 +1,4 @@
-from fastapi import HTTPException, BackgroundTasks
+from fastapi import BackgroundTasks
 import xmltodict
 import traceback
 
@@ -30,18 +30,19 @@ class ConsultarGtinUseCase:
             background_tasks (BackgroundTasks): Objeto para enfileiramento de tarefas assíncronas.
             
         Returns:
-            dict: Dicionário contendo os dados formatados do produto (compatível com ProdutoResponse).
-            
-        Raises:
-            HTTPException: Em caso de GTIN inválido, não encontrado ou falhas internas.
+            dict | JSONResponse: Dicionário contendo os dados formatados do produto (compatível com ProdutoResponse) em caso de sucesso, ou um JSONResponse com cStat e xMotivo em caso de erro/validação.
         """
         logger.info(f"Iniciando Use Case de consulta para GTIN: {codigo_gtin}")
         
         if not validate_gtin(codigo_gtin):
             logger.warning(f"GTIN inválido recebido no Use Case: {codigo_gtin}")
-            raise HTTPException(
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
                 status_code=400, 
-                detail="Código GTIN inválido. Verifique o tamanho e o dígito verificador."
+                content={
+                    "cStat": 0,
+                    "xMotivo": "Código GTIN inválido. Verifique o tamanho e o dígito verificador."
+                }
             )
 
         # 1. Tenta buscar no banco de dados local (Cache no Firestore)
@@ -120,10 +121,23 @@ class ConsultarGtinUseCase:
                 return resposta_cosmos
             else:
                 logger.warning(f"GTIN não encontrado na SEFAZ e na Bluesoft Cosmos: {codigo_gtin}")
-                raise HTTPException(status_code=404, detail="GTIN não encontrado nas bases de dados consultadas.")
-        except HTTPException:
-            raise
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "cStat": 0,
+                        "xMotivo": "GTIN não encontrado nas bases de dados consultadas."
+                    }
+                )
+
         except Exception as e:
             logger.error(f"Erro na consulta Bluesoft Cosmos para GTIN {codigo_gtin}: {str(e)}")
             logger.debug(traceback.format_exc())
-            raise HTTPException(status_code=500, detail=f"Erro interno ao processar a requisição: {str(e)}")
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "cStat": 0,
+                    "xMotivo": f"Erro interno ao processar a requisição: {str(e)}"
+                }
+            )
