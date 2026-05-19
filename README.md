@@ -172,13 +172,38 @@ EMPRESA_NOME=Minha Empresa
 
 ## Uso
 
-Para iniciar a API em modo de desenvolvimento, execute:
+Para iniciar a API em modo de desenvolvimento, execute a partir da raiz do projeto:
 
 ```bash
-uvicorn main:app --reload
+uvicorn src.main:app --reload
 ```
 
 A API ficará disponível no endereço [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+### Autenticação e Rate Limiting (SaaS)
+
+A API utiliza chaves de acesso para identificar os clientes e aplicar limites de tráfego (*Rate Limiting*).
+
+- O cliente **obrigatoriamente** deve enviar a chave de API através do cabeçalho HTTP `X-API-Key`.
+- **Soft Rollout (Fase Atual):** Atualmente, requisições sem a chave ainda são aceitas, mas retornam uma mensagem de advertência (`aviso_depreciacao`) no corpo do JSON, alertando sobre a futura obrigatoriedade da chave.
+- Para obter a sua chave de API, entre em contato com o suporte técnico.
+
+#### Geração de Novas Chaves (Administração)
+
+Para administradores do sistema, há um script CLI prático para gerar e registrar novas chaves de API criptograficamente seguras diretamente no banco Firestore da aplicação.
+
+Para rodar o script utilitário a partir da raiz do projeto:
+
+```bash
+# Formato básico (Cria uma chave com tier 'basic' e limite padrão de 100/minute)
+.venv\Scripts\python.exe -m src.utils.gerar_api_key "Nome do Cliente"
+
+# Customizando o plano e limites
+.venv\Scripts\python.exe -m src.utils.gerar_api_key "Nome do Cliente" --tier "pro" --rate-limit "300/minute"
+```
+
+O script gerará uma chave única iniciada com `gtin_` e a salvará automaticamente no Firestore. Copie e envie esta chave para o respectivo cliente.
+
 
 ### Endpoints Principais
 

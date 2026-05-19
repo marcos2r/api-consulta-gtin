@@ -1,11 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from src.core.logging_setup import logger, limpar_logs_antigos
 from src.core.config import settings
 from src.api.routes import router as api_router
 from src.repositories.produto_repo import produto_repository
+from src.core.limiter import limiter
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,6 +38,16 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+@app.middleware("http")
+async def add_auth_warning_header(request: Request, call_next):
+    response = await call_next(request)
+    if getattr(request.state, "auth_warning", False):
+        response.headers["Warning"] = '299 - "Authentication will be required soon. Please provide a valid X-API-Key."'
+    return response
 
 if settings.cors_origins:
     origins = [origin.strip() for origin in settings.cors_origins.split(",")]

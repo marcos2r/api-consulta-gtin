@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, Request
+from fastapi.responses import JSONResponse
 
 from src.use_cases.consultar_gtin import ConsultarGtinUseCase
-from src.repositories.produto_repo import produto_repository
 from src.schemas.produto import ProdutoResponse
+from src.repositories.produto_repo import produto_repository
+from src.core.limiter import limiter
+from src.core.security import verificar_api_key_soft
+from src.schemas.api_key import ApiKeyBase
 
 router = APIRouter()
 
@@ -16,10 +20,13 @@ def get_consultar_gtin_use_case() -> ConsultarGtinUseCase:
     response_description="Retorna dados detalhados do GTIN",
     response_model=ProdutoResponse
 )
+@limiter.limit("100/minute")
 async def consultar_gtin(
+    request: Request,
     codigo_gtin: str, 
     background_tasks: BackgroundTasks,
-    use_case: ConsultarGtinUseCase = Depends(get_consultar_gtin_use_case)
+    use_case: ConsultarGtinUseCase = Depends(get_consultar_gtin_use_case),
+    api_key: ApiKeyBase | None = Depends(verificar_api_key_soft)
 ):
     """Rota principal para consulta de informações de produtos por código GTIN/EAN.
     
@@ -33,7 +40,20 @@ async def consultar_gtin(
     Returns:
         ProdutoResponse: Resposta formatada e tipada com os dados do produto.
     """
-    return await use_case.executar(codigo_gtin, background_tasks)
+    resultado = await use_case.executar(codigo_gtin, background_tasks)
+    
+    # Soft Rollout: se for dict, injeta o aviso
+    if getattr(request.state, "auth_warning", False):
+        mensagem_aviso = "ATENÇÃO: A autenticação via header X-API-Key se tornará obrigatória em breve. Adeque sua aplicação."
+        if isinstance(resultado, dict):
+            resultado["aviso_depreciacao"] = mensagem_aviso
+        elif isinstance(resultado, JSONResponse):
+            import json
+            body = json.loads(resultado.body.decode("utf-8"))
+            body["aviso_depreciacao"] = mensagem_aviso
+            return JSONResponse(status_code=resultado.status_code, content=body, headers=resultado.headers)
+            
+    return resultado
 
 @router.get("/health", summary="Verificação de Saúde")
 async def health_check():
