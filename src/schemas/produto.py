@@ -35,4 +35,5 @@ class ProdutoResponse(BaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     cStat: Optional[str] = None
     xMotivo: Optional[str] = None
+    aviso_depreciacao: Optional[str] = None
     produto: Optional[ProdutoDetails] = None

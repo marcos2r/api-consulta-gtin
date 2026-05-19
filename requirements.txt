@@ -31,3 +31,5 @@ google-cloud-firestore==2.16.0
 pytest
 pytest-asyncio
 pytest-mock
+slowapi
+limits
