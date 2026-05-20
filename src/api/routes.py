@@ -51,7 +51,18 @@ async def consultar_gtin(
             import json
             body = json.loads(resultado.body.decode("utf-8"))
             body["aviso_depreciacao"] = mensagem_aviso
-            return JSONResponse(status_code=resultado.status_code, content=body, headers=resultado.headers)
+            # Evitamos repassar headers de controle como content-length e content-type originais.
+            # Ao limpá-los, permitimos que o Starlette recalcule o tamanho correto da nova payload,
+            # eliminando inconsistências que causam HTTP 502 em proxies estritos (como o Google Frontend).
+            headers_limpos = {
+                k: v for k, v in resultado.headers.items() 
+                if k.lower() not in ["content-length", "content-type"]
+            }
+            return JSONResponse(
+                status_code=resultado.status_code, 
+                content=body, 
+                headers=headers_limpos
+            )
             
     return resultado
 
